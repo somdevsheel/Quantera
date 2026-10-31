@@ -1,0 +1,81 @@
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials/
+.aws/
+*.tfstate
+*.tfstate.*
+
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python cache and build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Local data, downloaded datasets, and generated outputs
+data/
+datasets/
+downloads/
+staging/
+tmp/
+temp/
+*.parquet
+*.feather
+*.arrow
+*.duckdb
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs and runtime files
+logs/
+*.log
+*.pid
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node.js artifacts if frontend/tools are added in this repository
+node_modules/
+.npm/
+
+# Local AWS CLI installer
+awscliv2.zip
+
+# Accidental terminal artifacts
+/boto3
+/pd
+/time
+/yf
+/test.txt
