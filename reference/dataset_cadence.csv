@@ -1,0 +1,38 @@
+path_prefix,update_cadence,refresh_command,usage_rights
+bronze/india/equity_prices,daily (after 18:00 IST),pipelines/india_nse_udiff_backfill.py; pipelines/india_bse_bhavcopy_backfill.py,exchange data - internal research; redistribution needs NSE/BSE licence
+silver/india/equity_prices,daily,same as bronze,exchange data - internal research; redistribution needs NSE/BSE licence
+bronze/india/derivatives,daily,pipelines/india_nse_fo_backfill.py,NSE data - internal research; redistribution needs NSE licence
+silver/india/derivatives,daily,pipelines/india_nse_fo_backfill.py,NSE data - internal research; redistribution needs NSE licence
+gold/india/derivatives,daily (derived),pipelines/india_nse_option_greeks.py,derived from NSE data - same constraints
+bronze/india/indices,daily,pipelines/india_nse_indices_backfill.py,index data - NSE Indices licence for redistribution
+silver/india/indices,daily,pipelines/india_nse_indices_backfill.py,index data - NSE Indices licence for redistribution
+bronze/india/mutual_funds,daily,pipelines/india_amfi_nav_backfill.py,AMFI public NAV - attribute AMFI
+silver/india/mutual_funds,daily,pipelines/india_amfi_nav_backfill.py,AMFI public NAV - attribute AMFI
+bronze/india/corporate_actions,weekly,pipelines/india_nse_corporate_actions.py,NSE data - internal research
+silver/india/corporate_actions,weekly,pipelines/india_nse_corporate_actions.py,NSE data - internal research
+gold/india/corporate_actions,weekly (derived),pipelines/india_nse_corporate_actions.py --build-only,derived
+bronze/india/calendar,weekly,pipelines/india_nse_event_calendar.py,NSE data - internal research
+silver/india/calendar,weekly,pipelines/india_nse_event_calendar.py,NSE data - internal research
+gold/india/calendar,weekly (derived),pipelines/india_trading_calendar.py,derived
+bronze/india/fundamentals,quarterly (results season),pipelines/india_nse_financial_results.py,NSE filings - public disclosures; check NSE terms
+silver/india/fundamentals,quarterly,pipelines/india_nse_financial_results.py --stage normalize,public disclosures
+gold/india/fundamentals,quarterly (derived),pipelines/india_nse_financial_results.py --stage normalize,derived
+bronze/india/fred,monthly,pipelines/india_fred_series_backfill.py,FRED - per-series source terms (OECD/IMF/World Bank)
+silver/india,monthly (FRED series),pipelines/india_fred_series_backfill.py,FRED - per-series source terms
+bronze/global/fred,daily/monthly by series,pipelines/india_fred_series_backfill.py --catalog reference/series/global_fred_series.csv --region global,FRED - per-series source terms
+silver/global,daily/monthly by series,pipelines/india_fred_series_backfill.py --region global,FRED - per-series source terms
+gold/global/corporate_actions,on market-data refresh,pipelines/global_corporate_actions.py,derived from Yahoo - personal/research use only
+bronze/fundamentals/sec,quarterly (10-Q/10-K),ingestion/providers/fundamentals/sec_filings/download_xbrl_filings.py,SEC EDGAR - public domain US government data
+silver/fundamentals,quarterly,ingestion/providers/fundamentals/sec_filings/download_xbrl_filings.py --stage normalize,SEC EDGAR - public domain
+gold/fundamentals,quarterly (derived),ingestion/providers/fundamentals/sec_statement_builder.py,derived from SEC - public domain
+bronze/funds/sec_nport,quarterly (~60 days after quarter end),pipelines/global_etf_nport.py,SEC EDGAR - public domain
+silver/funds,quarterly,pipelines/global_etf_nport.py --stage normalize,SEC EDGAR - public domain
+gold/funds,quarterly (derived),pipelines/global_etf_nport.py --stage normalize,SEC EDGAR - public domain
+bronze/market,daily,ingestion/providers/market_data_ingestion.py,Yahoo Finance - personal/research use only; no redistribution
+bronze/etf,daily,ingestion/providers/market_data_ingestion.py,Yahoo Finance - personal/research use only; no redistribution
+bronze/indices,daily,ingestion/providers/market_data_ingestion.py,Yahoo Finance - personal/research use only; no redistribution
+gold,on upstream refresh (derived),scripts/finalize_lake.sh,inherits constraints of its inputs
+bronze/fundamentals,quarterly,ingestion/providers/fundamentals/sec_filings/*,SEC EDGAR - public domain
+silver/fx,daily,ingestion/providers/market_data_ingestion.py,Yahoo/FRED per source - research use
+silver/market,daily,ingestion/providers/market_data_ingestion.py,Yahoo Finance - personal/research use only; no redistribution
+silver/reference/india,on rebuild,pipelines/india_bse_bhavcopy_coverage_ledger.py; pipelines/india_trading_calendar.py,derived reference

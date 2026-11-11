@@ -1,0 +1,21 @@
+ticker,name,exchange,currency,category,fund_family
+SPY,State Street SPDR S&P 500 ETF Trust,PCX,USD,Large Blend,State Street Investment Management
+VOO,Vanguard S&P 500 ETF,PCX,USD,Large Blend,Vanguard
+IVV,iShares Core S&P 500 ETF,PCX,USD,Large Blend,iShares
+VTI,Vanguard Morningstar Total Stock Market ETF,PCX,USD,Large Blend,Vanguard
+QQQ,Invesco QQQ Trust,NGM,USD,Large Growth,Invesco
+QQQM,Invesco NASDAQ 100 ETF,NGM,USD,Large Growth,Invesco
+VXUS,Vanguard Total International Stock Index Fund ETF Shares,NGM,USD,Foreign Large Blend,Vanguard
+VEA,Vanguard FTSE Developed Markets Index Fund ETF Shares,PCX,USD,Foreign Large Blend,Vanguard
+VWO,Vanguard FTSE Emerging Markets Index Fund ETF Shares,PCX,USD,Diversified Emerging Mkts,Vanguard
+AGG,iShares Core U.S. Aggregate Bond ETF,PCX,USD,Intermediate Core Bond,iShares
+BND,Vanguard Total Bond Market Index Fund ETF Shares,NGM,USD,Intermediate Core Bond,Vanguard
+BNDX,Vanguard Total International Bond Index Fund ETF Shares,NGM,USD,Global Bond-USD Hedged,Vanguard
+TLT,iShares 20+ Year Treasury Bond ETF,NGM,USD,Long Government,iShares
+GLD,SPDR Gold Shares,PCX,USD,Commodities Focused,State Street Investment Management
+IAU,iShares Gold Trust,PCX,USD,Commodities Focused,iShares
+SLV,iShares Silver Trust,PCX,USD,Commodities Focused,iShares
+XLK,State Street Technology Select Sector SPDR ETF,PCX,USD,Technology,State Street Investment Management
+XLF,State Street Financial Select Sector SPDR ETF,PCX,USD,Financial,State Street Investment Management
+XLE,State Street Energy Select Sector SPDR ETF,PCX,USD,Equity Energy,State Street Investment Management
+XLV,State Street Health Care Select Sector SPDR ETF,PCX,USD,Health,State Street Investment Management

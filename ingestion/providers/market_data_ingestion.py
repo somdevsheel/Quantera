@@ -13,8 +13,14 @@ REGION = "ap-southeast-2"
 
 START_DATE = "2006-01-01"
 
-STAGING = Path("data/staging/market")
-STAGING.mkdir(parents=True, exist_ok=True)
+def get_paths(asset_class):
+    asset = asset_class.lower()
+    base = {"equity":"market", "etf":"etf", "index":"indices"}.get(asset)
+    if base is None:
+        raise ValueError(f"Unsupported asset class: {asset_class}")
+    staging = Path(f"data/staging/{base}")
+    staging.mkdir(parents=True, exist_ok=True)
+    return base, staging
 
 
 def get_s3_client():
@@ -66,68 +72,95 @@ def download_yahoo_history(symbol, start=START_DATE):
         df["trading_date"]
     ).dt.date
 
-    df = df.dropna(subset=required)
 
     df = df.sort_values("trading_date")
 
-    if df.duplicated(["symbol", "trading_date"]).any():
-        raise ValueError(f"Duplicate daily records found for {symbol}")
-
-    if (
-        (df["high"] < df[["open", "close"]].max(axis=1)).any()
-        or (df["low"] > df[["open", "close"]].min(axis=1)).any()
-        or (df["high"] < df["low"]).any()
-        or (df["volume"] < 0).any()
-    ):
-        raise ValueError(f"Invalid OHLCV records for {symbol}")
 
     return df
 
 
-def save_and_upload(df, symbol):
+def save_and_upload(df, symbol, asset_class="EQUITY"):
+    base, staging_dir = get_paths(asset_class)
     safe_symbol = symbol.replace("^", "").replace(".", "_")
-
-    local_file = STAGING / f"{safe_symbol}.parquet"
-
-    df.to_parquet(
-        local_file,
-        engine="pyarrow",
-        compression="zstd",
-        index=False,
-    )
-
-    ingestion_date = date.today().isoformat()
-
-    s3_key = (
-        f"bronze/market/provider=yahoo_finance/"
-        f"symbol={safe_symbol}/"
-        f"ingestion_date={ingestion_date}/"
-        f"daily_bars.parquet"
-    )
-
     s3 = get_s3_client()
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
 
-    s3.upload_file(
-        str(local_file),
-        BUCKET,
-        s3_key,
-        ExtraArgs={
-            "ContentType": "application/vnd.apache.parquet"
-        },
+    bronze_dir = Path(f"data/bronze/{base}")
+    quarantine_dir = Path(f"data/quarantine/{base}")
+    bronze_dir.mkdir(parents=True, exist_ok=True)
+    quarantine_dir.mkdir(parents=True, exist_ok=True)
+
+    def upload(frame, local_file, s3_key):
+        frame.to_parquet(local_file, engine="pyarrow",
+                         compression="zstd", index=False)
+        s3.upload_file(
+            str(local_file), BUCKET, s3_key,
+            ExtraArgs={"ContentType": "application/vnd.apache.parquet"},
+        )
+
+    # Preserve the downloaded records first.
+    raw_file = bronze_dir / f"{safe_symbol}_{run_id}.parquet"
+    raw_key = (
+        f"bronze/{base}/provider=yahoo_finance/symbol={safe_symbol}/"
+        f"run_id={run_id}/daily_bars.parquet"
     )
+    upload(df, raw_file, raw_key)
 
-    print(f"Local file: {local_file}")
-    print(f"S3 location: s3://{BUCKET}/{s3_key}")
-    print(f"Records uploaded: {len(df)}")
+    required = ["open", "high", "low", "close", "volume"]
+    numeric = df[required].apply(pd.to_numeric, errors="coerce")
+    reasons = pd.Series("", index=df.index, dtype="object")
 
+    def flag(mask, reason):
+        mask = mask.fillna(True)
+        reasons.loc[mask] = reasons.loc[mask].apply(
+            lambda old: f"{old};{reason}" if old else reason
+        )
 
-def run_yahoo(symbols, start):
+    flag(numeric.isna().any(axis=1), "missing_or_non_numeric")
+    flag(numeric.isin([float("inf"), float("-inf")]).any(axis=1),
+         "non_finite_values")
+    flag((numeric[["open", "high", "low", "close"]] <= 0).any(axis=1),
+         "non_positive_price")
+    flag(numeric["high"] < numeric[["open", "close"]].max(axis=1),
+         "high_below_open_or_close")
+    flag(numeric["low"] > numeric[["open", "close"]].min(axis=1),
+         "low_above_open_or_close")
+    flag(numeric["high"] < numeric["low"], "high_below_low")
+    flag(numeric["volume"] < 0, "negative_volume")
+    flag(df.duplicated(["symbol", "trading_date"], keep=False),
+         "duplicate_symbol_date")
+
+    invalid = reasons.ne("")
+    valid_df = df.loc[~invalid].copy()
+    quarantine = df.loc[invalid].copy()
+
+    if not quarantine.empty:
+        quarantine["validation_reasons"] = reasons.loc[invalid]
+        qfile = quarantine_dir / f"{safe_symbol}_{run_id}.parquet"
+        qkey = (
+            f"quarantine/{base}/provider=yahoo_finance/"
+            f"symbol={safe_symbol}/run_id={run_id}/invalid_records.parquet"
+        )
+        upload(quarantine, qfile, qkey)
+
+    if not valid_df.empty:
+        local_file = staging_dir / f"{safe_symbol}.parquet"
+        valid_df.to_parquet(
+            local_file, engine="pyarrow", compression="zstd", index=False
+        )
+
+    print(f"Raw records preserved: {len(df)}")
+    print(f"Valid records staged: {len(valid_df)}")
+    print(f"Quarantined records: {len(quarantine)}")
+    print(f"Bronze: s3://{BUCKET}/{raw_key}")
+
+def run_yahoo(symbols, start, asset_class="EQUITY"):
     for symbol in symbols:
         try:
             df = download_yahoo_history(symbol, start)
 
             if df is not None:
-                save_and_upload(df, symbol)
+                save_and_upload(df, symbol, asset_class)
 
             time.sleep(2)
 
@@ -157,9 +190,11 @@ def main():
         default=START_DATE,
     )
 
+    parser.add_argument("--asset-class", choices=["EQUITY", "ETF", "INDEX"], default="EQUITY")
+
     args = parser.parse_args()
 
-    run_yahoo(args.symbols, args.start)
+    run_yahoo(args.symbols, args.start, args.asset_class)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,54 @@
+series_id,dataset,title,units,frequency,original_source
+DGS1MO,rates,US Treasury 1-month constant maturity,percent,daily,Federal Reserve H.15
+DGS3MO,rates,US Treasury 3-month constant maturity,percent,daily,Federal Reserve H.15
+DGS6MO,rates,US Treasury 6-month constant maturity,percent,daily,Federal Reserve H.15
+DGS1,rates,US Treasury 1-year constant maturity,percent,daily,Federal Reserve H.15
+DGS2,rates,US Treasury 2-year constant maturity,percent,daily,Federal Reserve H.15
+DGS5,rates,US Treasury 5-year constant maturity,percent,daily,Federal Reserve H.15
+DGS7,rates,US Treasury 7-year constant maturity,percent,daily,Federal Reserve H.15
+DGS10,rates,US Treasury 10-year constant maturity,percent,daily,Federal Reserve H.15
+DGS20,rates,US Treasury 20-year constant maturity,percent,daily,Federal Reserve H.15
+DGS30,rates,US Treasury 30-year constant maturity,percent,daily,Federal Reserve H.15
+DFII10,rates,US 10-year TIPS real yield,percent,daily,Federal Reserve H.15
+T10Y2Y,rates,US 10Y minus 2Y spread,percent,daily,Federal Reserve Bank of St. Louis
+DFF,rates,Effective federal funds rate,percent,daily,Federal Reserve H.15
+FEDFUNDS,rates,Effective federal funds rate (monthly),percent,monthly,Federal Reserve H.15
+SOFR,rates,Secured overnight financing rate,percent,daily,Federal Reserve Bank of New York
+BAMLC0A0CM,rates,ICE BofA US corporate IG OAS (FRED keeps 3y window),percent,daily,ICE Data Indices
+BAMLH0A0HYM2,rates,ICE BofA US high yield OAS (FRED keeps 3y window),percent,daily,ICE Data Indices
+DEXUSEU,fx,USD per EUR,USD per 1 EUR,daily,Federal Reserve H.10
+DEXUSUK,fx,USD per GBP,USD per 1 GBP,daily,Federal Reserve H.10
+DEXJPUS,fx,JPY per USD,JPY per 1 USD,daily,Federal Reserve H.10
+DEXCAUS,fx,CAD per USD,CAD per 1 USD,daily,Federal Reserve H.10
+DEXUSAL,fx,USD per AUD,USD per 1 AUD,daily,Federal Reserve H.10
+DEXUSNZ,fx,USD per NZD,USD per 1 NZD,daily,Federal Reserve H.10
+DEXSZUS,fx,CHF per USD,CHF per 1 USD,daily,Federal Reserve H.10
+DEXCHUS,fx,CNY per USD,CNY per 1 USD,daily,Federal Reserve H.10
+DEXHKUS,fx,HKD per USD,HKD per 1 USD,daily,Federal Reserve H.10
+DEXKOUS,fx,KRW per USD,KRW per 1 USD,daily,Federal Reserve H.10
+DEXSIUS,fx,SGD per USD,SGD per 1 USD,daily,Federal Reserve H.10
+DEXINUS,fx,INR per USD,INR per 1 USD,daily,Federal Reserve H.10
+DEXBZUS,fx,BRL per USD,BRL per 1 USD,daily,Federal Reserve H.10
+DEXMXUS,fx,MXN per USD,MXN per 1 USD,daily,Federal Reserve H.10
+DEXSDUS,fx,SEK per USD,SEK per 1 USD,daily,Federal Reserve H.10
+DTWEXBGS,fx,Nominal broad US dollar index,index Jan 2006=100,daily,Federal Reserve H.10
+DCOILWTICO,commodities,WTI crude oil spot,USD per barrel,daily,EIA
+DCOILBRENTEU,commodities,Brent crude oil spot,USD per barrel,daily,EIA
+DHHNGSP,commodities,Henry Hub natural gas spot,USD per MMBtu,daily,EIA
+PCOPPUSDM,commodities,Global copper price,USD per metric ton,monthly,IMF Primary Commodity Prices
+PALUMUSDM,commodities,Global aluminum price,USD per metric ton,monthly,IMF Primary Commodity Prices
+PWHEAMTUSDM,commodities,Global wheat price,USD per metric ton,monthly,IMF Primary Commodity Prices
+PMAIZMTUSDM,commodities,Global maize price,USD per metric ton,monthly,IMF Primary Commodity Prices
+CBBTCUSD,crypto,Coinbase Bitcoin,USD per BTC,daily,Coinbase
+CBETHUSD,crypto,Coinbase Ethereum,USD per ETH,daily,Coinbase
+VIXCLS,volatility,CBOE VIX,index,daily,CBOE
+CPIAUCSL,macro,US CPI all items SA,index 1982-84=100,monthly,BLS
+CPILFESL,macro,US core CPI SA,index 1982-84=100,monthly,BLS
+UNRATE,macro,US unemployment rate,percent,monthly,BLS
+PAYEMS,macro,US nonfarm payrolls,thousands of persons,monthly,BLS
+GDP,macro,US nominal GDP SAAR,billions USD,quarterly,BEA
+GDPC1,macro,US real GDP SAAR,billions chained 2017 USD,quarterly,BEA
+INDPRO,macro,US industrial production,index 2017=100,monthly,Federal Reserve G.17
+RSAFS,macro,US retail sales,millions USD,monthly,Census
+M2SL,macro,US M2 money stock,billions USD,monthly,Federal Reserve H.6
+UMCSENT,macro,University of Michigan consumer sentiment,index 1966Q1=100,monthly,University of Michigan

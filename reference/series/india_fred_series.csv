@@ -1,0 +1,25 @@
+series_id,dataset,title,units,frequency,original_source
+DEXINUS,fx,INR per USD (noon buying rate New York),INR per 1 USD,daily,Federal Reserve H.10
+DEXUSEU,fx,USD per EUR,USD per 1 EUR,daily,Federal Reserve H.10
+DEXUSUK,fx,USD per GBP,USD per 1 GBP,daily,Federal Reserve H.10
+DEXJPUS,fx,JPY per USD,JPY per 1 USD,daily,Federal Reserve H.10
+DEXCHUS,fx,CNY per USD,CNY per 1 USD,daily,Federal Reserve H.10
+DEXSIUS,fx,SGD per USD,SGD per 1 USD,daily,Federal Reserve H.10
+CCUSMA02INM618N,fx,INR per USD monthly average,INR per 1 USD,monthly,OECD MEI
+IRSTCI01INM156N,rates,India call money / interbank immediate rate,percent per annum,monthly,OECD MEI
+INDIR3TIB01STM,rates,India 3-month interbank rate,percent per annum,monthly,OECD MEI
+INDIRLTLT01STM,rates,India 10-year government bond yield,percent per annum,monthly,OECD MEI
+INTDSRINM193N,rates,India discount rate (discontinued 2022),percent per annum,monthly,IMF IFS
+INDCPIALLMINMEI,macro,India CPI all items,index 2015=100,monthly,OECD MEI
+INDCPALTT01IXNBM,macro,India CPI total,index 2015=100,monthly,OECD MEI
+FPCPITOTLZGIND,macro,India CPI inflation,percent YoY,annual,World Bank
+MKTGDPINA646NWDB,macro,India GDP current prices,USD,annual,World Bank
+NGDPRNSAXDCINQ,macro,India real GDP (NSA),INR millions (domestic currency),quarterly,IMF IFS
+NGDPNSAXDCINQ,macro,India nominal GDP (NSA),INR millions (domestic currency),quarterly,IMF IFS
+INDPROINDMISMEI,macro,India production of total industry,index 2015=100,monthly,OECD MEI
+INDPRINTO01IXOBM,macro,India total industry production,index 2015=100,monthly,OECD MEI
+MABMM301INM189S,macro,India broad money M3 (discontinued 2018),INR SA,monthly,OECD MEI
+XTEXVA01INM667S,macro,India exports of goods,USD SA,monthly,OECD MEI
+XTIMVA01INM667S,macro,India imports of goods,USD SA,monthly,OECD MEI
+TRESEGINM052N,macro,India total reserves excluding gold,USD millions,monthly,IMF IFS
+INDLORSGPNOSTSAM,macro,India OECD composite leading indicator (normalized),index,monthly,OECD

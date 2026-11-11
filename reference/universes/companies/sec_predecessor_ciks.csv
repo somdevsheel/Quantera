@@ -1,0 +1,8 @@
+canonical_symbol,current_cik,predecessor_cik,predecessor_name,relationship,verified_utc
+XOM,0002115436,0000034088,EXXON MOBIL CORP,holding-company reorganization (2026); predecessor still files,2026-11-09
+BLK,0002012383,0001364742,"BlackRock Finance, Inc. (formerly BlackRock, Inc.)",holding-company reorganization (2024),2026-11-09
+GOOGL,0001652044,0001288776,GOOGLE INC.,Alphabet holding-company reorganization (2015),2026-11-09
+DIS,0001744489,0001001039,TWDC Enterprises 18 Corp. (formerly WALT DISNEY CO),new holdco after 21CF acquisition (2019),2026-11-09
+LIN,0001707925,0000884905,LINDE INC (formerly PRAXAIR INC),Praxair/Linde AG merger (2018),2026-11-09
+AVGO,0001730168,0001441634,Avago Technologies LTD,predecessor of Broadcom Ltd (2008-2016),2026-11-09
+AVGO,0001730168,0001649338,Broadcom Pte. Ltd. (formerly Broadcom Ltd),redomiciliation to Broadcom Inc. (2018),2026-11-09

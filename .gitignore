@@ -70,8 +70,24 @@ desktop.ini
 node_modules/
 .npm/
 
-# Local AWS CLI installer
+# Local AWS CLI installer (zip and unzipped folder)
 awscliv2.zip
+/aws/
+
+# Backups and partial writes (pipelines write *.tmp then rename)
+*.bak
+*.bak.*
+*.tmp
+
+# One-off job chains written for a single run (already completed). The reusable
+# ones are committed: scripts/finalize_lake.sh, scripts/backup_lake_local.sh
+scripts/after_fo_renormalize.sh
+scripts/finalize_when_done.sh
+scripts/refinalize_*.sh
+scripts/resume_and_finalize.sh
+
+# AI prompt drafts (working notes, not project docs)
+*_claude_prompt.md
 
 # Accidental terminal artifacts
 /boto3
@@ -79,3 +95,4 @@ awscliv2.zip
 /time
 /yf
 /test.txt
+/sqlite3

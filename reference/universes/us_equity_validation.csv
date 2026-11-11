@@ -1,0 +1,51 @@
+symbol,proposed_mic,actual_symbol,actual_mic,company,validation
+QCOM,XNAS,QCOM,XNAS,QUALCOMM Incorporated - Common Stock,MATCH
+TXN,XNAS,TXN,XNAS,Texas Instruments Incorporated - Common Stock,MATCH
+INTC,XNAS,INTC,XNAS,Intel Corporation - Common Stock,MATCH
+AMAT,XNAS,AMAT,XNAS,"Applied Materials, Inc. - Common Stock",MATCH
+LRCX,XNAS,LRCX,XNAS,Lam Research Corporation - Common Stock,MATCH
+MU,XNAS,MU,XNAS,"Micron Technology, Inc. - Common Stock",MATCH
+ADI,XNAS,ADI,XNAS,"Analog Devices, Inc. - Common Stock",MATCH
+KLAC,XNAS,KLAC,XNAS,KLA Corporation  - Common Stock,MATCH
+SNPS,XNAS,SNPS,XNAS,"Synopsys, Inc. - Common Stock",MATCH
+CDNS,XNAS,CDNS,XNAS,"Cadence Design Systems, Inc. - Common Stock",MATCH
+NFLX,XNAS,NFLX,XNAS,"Netflix, Inc. - Common Stock",MATCH
+PEP,XNAS,PEP,XNAS,"PepsiCo, Inc. - Common Stock",MATCH
+TMUS,XNAS,TMUS,XNAS,"T-Mobile US, Inc. - Common Stock",MATCH
+ISRG,XNAS,ISRG,XNAS,"Intuitive Surgical, Inc. - Common Stock",MATCH
+REGN,XNAS,REGN,XNAS,"Regeneron Pharmaceuticals, Inc. - Common Stock",MATCH
+GILD,XNAS,GILD,XNAS,"Gilead Sciences, Inc. - Common Stock",MATCH
+MDLZ,XNAS,MDLZ,XNAS,"Mondelez International, Inc. - Class A Common Stock",MATCH
+SBUX,XNAS,SBUX,XNAS,Starbucks Corporation - Common Stock,MATCH
+ADP,XNAS,ADP,XNAS,"Automatic Data Processing, Inc. - Common Stock",MATCH
+CTAS,XNAS,CTAS,XNAS,Cintas Corporation - Common Stock,MATCH
+ORLY,XNAS,ORLY,XNAS,"O'Reilly Automotive, Inc. - Common Stock",MATCH
+PANW,XNAS,PANW,XNAS,"Palo Alto Networks, Inc. - Common Stock",MATCH
+CRWD,XNAS,CRWD,XNAS,"CrowdStrike Holdings, Inc. - Class A Common Stock",MATCH
+APP,XNAS,APP,XNAS,Applovin Corporation - Class A Common Stock,MATCH
+ARM,XNAS,ARM,XNAS,Arm Holdings plc - American Depositary Shares,MATCH
+LLY,XNYS,LLY,XNYS,Eli Lilly and Company Common Stock,MATCH
+BRK-B,XNYS,BRK.B,XNYS,Berkshire Hathaway Inc. New Common Stock,MATCH
+TSM,XNYS,TSM,XNYS,Taiwan Semiconductor Manufacturing Company Ltd.,MATCH
+V,XNYS,V,XNYS,Visa Inc.,MATCH
+MA,XNYS,MA,XNYS,Mastercard Incorporated Common Stock,MATCH
+PG,XNYS,PG,XNYS,Procter & Gamble Company (The) Common Stock,MATCH
+KO,XNYS,KO,XNYS,Coca-Cola Company (The) Common Stock,MATCH
+MCD,XNYS,MCD,XNYS,McDonald's Corporation Common Stock,MATCH
+DIS,XNYS,DIS,XNYS,Walt Disney Company (The) Common Stock,MATCH
+IBM,XNYS,IBM,XNYS,International Business Machines Corporation Common Stock,MATCH
+GE,XNYS,GE,XNYS,GE Aerospace Common Stock,MATCH
+GS,XNYS,GS,XNYS,"Goldman Sachs Group, Inc. (The) Common Stock",MATCH
+MS,XNYS,MS,XNYS,Morgan Stanley Common Stock,MATCH
+C,XNYS,C,XNYS,"Citigroup, Inc. Common Stock",MATCH
+WFC,XNYS,WFC,XNYS,Wells Fargo & Company Common Stock,MATCH
+COP,XNYS,COP,XNYS,ConocoPhillips Common Stock,MATCH
+SLB,XNYS,SLB,XNYS,SLB Limited Common Shares,MATCH
+UPS,XNYS,UPS,XNYS,"United Parcel Service, Inc. Common Stock",MATCH
+NKE,XNYS,NKE,XNYS,"Nike, Inc. Common Stock",MATCH
+LOW,XNYS,LOW,XNYS,"Lowe's Companies, Inc. Common Stock",MATCH
+TMO,XNYS,TMO,XNYS,Thermo Fisher Scientific Inc Common Stock,MATCH
+DHR,XNYS,DHR,XNYS,Danaher Corporation Common Stock,MATCH
+LIN,XNAS,LIN,XNAS,Linde plc - Ordinary Shares,MATCH
+PM,XNYS,PM,XNYS,Philip Morris International Inc Common Stock,MATCH
+RTX,XNYS,RTX,XNYS,RTX Corporation Common Stock,MATCH
