@@ -8,7 +8,7 @@ import uvicorn
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="127.0.0.1")
-    ap.add_argument("--port", type=int, default=8000)
+    ap.add_argument("--port", type=int, default=8001)  # AFOS backend uses 8000
     ap.add_argument("--release")
     ap.add_argument("--mode")
     ap.add_argument("--drift-check", choices=["fast", "full"])

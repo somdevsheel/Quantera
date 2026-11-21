@@ -10,7 +10,7 @@ bronze/india/mutual_funds,daily,pipelines/india_amfi_nav_backfill.py,AMFI public
 silver/india/mutual_funds,daily,pipelines/india_amfi_nav_backfill.py,AMFI public NAV - attribute AMFI
 bronze/india/corporate_actions,weekly,pipelines/india_nse_corporate_actions.py,NSE data - internal research
 silver/india/corporate_actions,weekly,pipelines/india_nse_corporate_actions.py,NSE data - internal research
-gold/india/corporate_actions,weekly (derived),pipelines/india_nse_corporate_actions.py --build-only,derived
+gold/india/corporate_actions,weekly (derived),pipelines/india_nse_corporate_actions.py --build-only; pipelines/india_dividend_factors.py,derived from NSE data - internal research
 bronze/india/calendar,weekly,pipelines/india_nse_event_calendar.py,NSE data - internal research
 silver/india/calendar,weekly,pipelines/india_nse_event_calendar.py,NSE data - internal research
 gold/india/calendar,weekly (derived),pipelines/india_trading_calendar.py,derived
@@ -36,3 +36,6 @@ bronze/fundamentals,quarterly,ingestion/providers/fundamentals/sec_filings/*,SEC
 silver/fx,daily,ingestion/providers/market_data_ingestion.py,Yahoo/FRED per source - research use
 silver/market,daily,ingestion/providers/market_data_ingestion.py,Yahoo Finance - personal/research use only; no redistribution
 silver/reference/india,on rebuild,pipelines/india_bse_bhavcopy_coverage_ledger.py; pipelines/india_trading_calendar.py,derived reference
+bronze/india/reference/nse,weekly,pipelines/india_nse_reference_lists.py,NSE public files - internal research; redistribution needs NSE / NSE Indices licence
+silver/india/reference,weekly,pipelines/india_nse_reference_lists.py --build-only,NSE public files - internal research; index lists (c) NSE Indices
+gold/india/reference,weekly (derived),pipelines/india_security_id_history.py,derived from NSE data - internal research

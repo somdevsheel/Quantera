@@ -38,7 +38,11 @@ def resolve(lake, instrument_id=None, symbol=None, exchange=None, bse_code=None,
         el_hit, ins_hit = el[(el.exchange_mic == "XBOM") & (el.listing_code == str(bse_code))], ins.iloc[0:0]
     elif isin:
         el_hit = el[el.instrument_id == f"IN:{isin.upper()}"]
-        ins_hit = ins[ins.isin == isin.upper()]
+        ins_hit = ins[ins["isin"] == isin.upper()]  # not ins.isin: that is DataFrame.isin()
+        if el_hit.empty:  # an earlier ISIN of the security (most splits issue a new one)
+            key, _ = lake.nse_security(instrument_id=f"IN:{isin.upper()}")
+            if key:
+                el_hit = el[el.instrument_id == key]
     elif instrument_id:
         el_hit, ins_hit = el[el.instrument_id == instrument_id], ins[ins.instrument_id == instrument_id]
     else:
@@ -46,6 +50,12 @@ def resolve(lake, instrument_id=None, symbol=None, exchange=None, bse_code=None,
         el_hit, ins_hit = el[el.listing_symbol.str.upper() == s], ins[ins.canonical_symbol.str.upper() == s]
     if ex:
         el_hit, ins_hit = el_hit[el_hit.exchange_mic == ex], ins_hit[ins_hit.exchange_mic == ex]
+    if symbol and not bse_code and el_hit.empty and ex in (None, "XNSE"):
+        # A former NSE symbol (renamed company, e.g. CADILAHC -> ZYDUSLIFE) resolves to the
+        # security that carried it, via the identity history.
+        key, _ = lake.nse_security(symbol=symbol)
+        if key:
+            el_hit = el[(el.instrument_id == key) & (el.exchange_mic == "XNSE")]
     out = [Listing(r.instrument_id, r.exchange_mic, r.listing_symbol, r.listing_code, r.listing_name, "exchange_listings")
            for r in el_hit.itertuples()]
     covered = {l.exchange_mic for l in out}

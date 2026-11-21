@@ -21,6 +21,12 @@ step "India: NSE fundamentals normalize (idempotent)"
 python pipelines/india_nse_financial_results.py --stage normalize --reparse
 step "India: corporate actions rebuild"
 python pipelines/india_nse_corporate_actions.py --build-only
+step "India: NSE reference lists (symbol changes, index constituents, industry) from Bronze"
+python pipelines/india_nse_reference_lists.py --build-only
+step "India: security identity history (renames + ISIN changes)"
+python pipelines/india_security_id_history.py
+step "India: dividend total-return factors"
+python pipelines/india_dividend_factors.py
 step "India: option implied vol + Greeks (incremental)"
 if pgrep -f "^python .*india_nse_option_greeks\.py" >/dev/null; then echo "already running; skipped"; else python pipelines/india_nse_option_greeks.py; fi
 step "India: trading calendar"

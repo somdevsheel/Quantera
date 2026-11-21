@@ -15,11 +15,18 @@ DEST="${1:?usage: $0 <backup_dir> [--execute]}"
 MODE="${2:-}"
 mkdir -p "$DEST"
 
-need=$(du -sb data | cut -f1)
+need=$(du -sb --exclude='api_cache' data | cut -f1)
+have=$(du -sb "$DEST/data" 2>/dev/null | cut -f1 || echo 0)
 free=$(df -B1 --output=avail "$DEST" | tail -1)
-echo "lake: $((need / 1000000000)) GB | free at destination: $((free / 1000000000)) GB"
+echo "lake: $((need / 1000000000)) GB | already in backup: $((${have:-0} / 1000000000)) GB | free at destination: $((free / 1000000000)) GB"
+if [[ "$MODE" == "--execute" ]] && (( need - ${have:-0} > free )); then
+  echo "ERROR: not enough free space at $DEST (need about $(((need - ${have:-0}) / 1000000000)) GB more)" >&2
+  exit 2
+fi
 
-OPTS=(-rt --modify-window=2 --no-perms --no-owner --no-group --exclude='*.tmp' --exclude='*.parquet.tmp')
+# api_cache/ is derived from release files and rebuilt in seconds (python -m api.cache --build).
+OPTS=(-rt --modify-window=2 --no-perms --no-owner --no-group --exclude='*.tmp' --exclude='*.parquet.tmp'
+      --exclude='releases/*/api_cache/')
 if [[ "$MODE" != "--execute" ]]; then
   rsync "${OPTS[@]}" --dry-run --stats data/ "$DEST/data/" | tail -15
   echo; echo "Dry run only. Re-run with --execute to copy."

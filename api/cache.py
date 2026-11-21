@@ -24,14 +24,28 @@ import pyarrow.parquet as pq
 from . import datasets as ds
 from .release import REL_DIR, Release
 
-VERSION = "api_cache_v1"
+VERSION = "api_cache_v2"  # v2: NSE keyed by security_key (identity history)
 ROW_GROUP = 32_768
+
+# NSE rows keyed by security (gold/india/reference/nse_security_id_history): every ISIN of a
+# security and its pre-2011 symbol rows share one key. Used by the cache build and by the
+# API's uncached path, so both select exactly the same rows.
+NSE_KEYED = """
+    SELECT coalesce(si.security_key, ss.security_key, p.instrument_id, 'NSESYM:' || p.symbol) AS lookup_key, p.*
+    FROM read_parquet({files}, union_by_name=true) AS p
+    LEFT JOIN (SELECT DISTINCT instrument_id, security_key FROM read_parquet({hist})
+               WHERE instrument_id IS NOT NULL) AS si ON p.instrument_id = si.instrument_id
+    LEFT JOIN (SELECT symbol, first_date, last_date, security_key FROM read_parquet({hist})
+               WHERE instrument_id IS NULL) AS ss
+           ON p.instrument_id IS NULL AND p.symbol = ss.symbol
+          AND CAST(p.trade_date AS DATE) BETWEEN ss.first_date AND ss.last_date"""
 
 # lookup_key: what an API query filters on; rows are sorted by it.
 SPECS = {
-    "nse_equity_daily": "coalesce(instrument_id, 'NSESYM:' || symbol)",   # pre-2011 rows have no ISIN
-    "bse_equity_daily": "bse_scrip_code",
+    "nse_equity_daily": NSE_KEYED.format(files="$files", hist="$hist"),
+    "bse_equity_daily": "SELECT bse_scrip_code AS lookup_key, * FROM read_parquet($files, union_by_name=true)",
 }
+EXTRA_SOURCES = {"nse_equity_daily": "nse_security_id_history"}
 
 
 def _source_hash(files):
@@ -54,14 +68,18 @@ def build(tag=None):
     con = duckdb.connect(config={"threads": 8, "memory_limit": "12GB"})
     meta = {"version": VERSION, "release": rel.tag, "built_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "datasets": {}}
-    for name, key in SPECS.items():
+    for name, select in SPECS.items():
         files = [p for _, p in dsets[name].files]
+        params = {"files": files}
+        if name in EXTRA_SOURCES:
+            params["hist"] = [p for _, p in dsets[EXTRA_SOURCES[name]].files]
+            files = files + params["hist"]
         target, tmp = out / f"{name}.parquet", out / f"{name}.parquet.tmp"
         t = time.time()
-        con.execute(f"""COPY (SELECT {key} AS lookup_key, * FROM read_parquet($files, union_by_name=true)
-                              ORDER BY lookup_key, trade_date)
-                        TO '{tmp}' (FORMAT parquet, COMPRESSION zstd, ROW_GROUP_SIZE {ROW_GROUP})""", {"files": files})
-        src_rows = con.execute("SELECT count(*) FROM read_parquet($files, union_by_name=true)", {"files": files}).fetchone()[0]
+        con.execute(f"""COPY ({select} ORDER BY lookup_key, trade_date)
+                        TO '{tmp}' (FORMAT parquet, COMPRESSION zstd, ROW_GROUP_SIZE {ROW_GROUP})""", params)
+        src_rows = con.execute("SELECT count(*) FROM read_parquet($files, union_by_name=true)",
+                               {"files": params["files"]}).fetchall()[0][0]
         rows = pq.ParquetFile(tmp).metadata.num_rows
         if rows != src_rows:
             tmp.unlink()
@@ -85,6 +103,8 @@ def load(release, dsets):
     for name, m in meta.get("datasets", {}).items():
         path = f.parent / m["path"]
         files = [p for _, p in dsets[name].files] if name in dsets else []
+        if name in EXTRA_SOURCES:
+            files += [p for _, p in dsets[EXTRA_SOURCES[name]].files]
         if meta.get("version") != VERSION or meta.get("release") != release.tag:
             problems.append(f"{name}: built for {meta.get('release')}/{meta.get('version')}")
         elif not path.exists() or path.stat().st_size != m["bytes"]:

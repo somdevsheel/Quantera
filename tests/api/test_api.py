@@ -119,7 +119,78 @@ def test_api_cache_matches_per_day_files(client, lake, url):
 
 def test_pre_isin_nse_rows_are_returned_and_flagged(client):
     rows = get(client, "/v1/prices/daily?symbol=RELIANCE&exchange=NSE&start=2005-01-01&end=2005-01-31")["data"]
-    assert rows and all(r["id_match"] == "SYMBOL_PRE_ISIN" for r in rows)
+    assert rows and all(r["id_match"] == "LINKED_PRE_ISIN" for r in rows)
+
+
+# --------------------------------------------------------------------------- identity history
+def test_isin_changes_do_not_cut_history(client):
+    """HDFCBANK changed ISIN in 2011 and 2019 (face-value splits). Keyed only by today's ISIN,
+    2011-2019 used to vanish silently."""
+    b = get(client, "/v1/prices/daily?symbol=HDFCBANK&exchange=NSE&series=EQ&limit=100000")
+    years = {r["trade_date"][:4] for r in b["data"]}
+    assert {str(y) for y in range(2000, 2026)} <= years
+    assert {r["id_match"] for r in b["data"]} == {"INSTRUMENT_ID", "LINKED_OTHER_ISIN", "LINKED_PRE_ISIN"}
+    assert len(b["security"]["isins"]) == 3
+    mid = [r for r in b["data"] if "2012-01-01" <= r["trade_date"] <= "2018-12-31"]
+    assert len(mid) > 1700
+
+
+def test_renamed_symbol_resolves_and_keeps_history(client):
+    b = get(client, "/v1/prices/daily?symbol=CADILAHC&exchange=NSE&series=EQ&start=2012-01-01&end=2012-01-31")
+    assert b["instrument"]["instrument_id"] == "IN:INE010B01027" and b["data"][0]["symbol"] == "CADILAHC"
+    pre = get(client, "/v1/prices/daily?symbol=ADANIENT&exchange=NSE&series=EQ&start=2005-01-03&end=2005-01-07")
+    assert {r["symbol"] for r in pre["data"]} == {"ADANIEXPO"}     # renamed 2006, linked via symbolchange.csv
+    h = get(client, "/v1/instruments/history?symbol=ZYDUSLIFE")
+    assert [s["symbol"] for s in h["segments"]][-1] == "ZYDUSLIFE" and len(h["segments"]) >= 3
+
+
+def test_resolve_by_current_and_former_isin(client):
+    cur = get(client, "/v1/instruments/resolve?isin=INE467B01029&exchange=XNSE")["data"]
+    assert [(r["symbol"], r["exchange_mic"]) for r in cur] == [("TCS", "XNSE")]
+    old = get(client, "/v1/instruments/resolve?isin=INE040A01018&exchange=XNSE")["data"]   # HDFCBANK pre-2011
+    assert old[0]["instrument_id"] == "IN:INE040A01034"
+    rows = get(client, "/v1/prices/daily?isin=INE040A01026&exchange=NSE&start=2015-01-01&end=2015-01-10")["data"]
+    assert rows and all(r["id_match"] == "LINKED_OTHER_ISIN" for r in rows)
+
+
+def test_nse_statements_resolve_former_symbol(client):
+    """NSE stamps a company's current symbol on all its filings; a query by a former symbol
+    (CADILAHC, renamed ZYDUSLIFE 2022-03-07) must still return the company's statements."""
+    url = ("/v1/fundamentals/statements?source=nse&period_type=Quarterly&consolidated=Consolidated"
+           "&limit=100000&symbol=")
+    new, old = get(client, url + "ZYDUSLIFE")["data"], get(client, url + "CADILAHC")["data"]
+    assert new and new == old and min(r["to_date"] for r in new) < "2022-01-01"
+
+
+# --------------------------------------------------------------------------- dividends + total return
+def test_dividend_events_summed_and_factor_formula(client):
+    rows = get(client, "/v1/corporate-actions/dividends?symbol=LT&exchange=NSE")["data"]
+    lt = next(r for r in rows if r["ex_date"] == "2023-08-02")        # Rs 24 final + Rs 6 special
+    assert lt["dividend_cash_inr"] == pytest.approx(30.0) and lt["apply"]
+    assert lt["dividend_factor"] == pytest.approx((lt["prior_close"] - 30.0) / lt["prior_close"])
+
+
+def test_total_return_applies_dividends_point_in_time(client):
+    base = "/v1/prices/daily?symbol=LT&exchange=NSE&series=EQ&start=2023-07-31&end=2023-07-31"
+    split = get(client, base + "&adjust=split&as_of=2023-08-02")["data"][0]
+    before = get(client, base + "&adjust=total&as_of=2023-08-01")["data"][0]    # ex-date 2023-08-02 not yet known
+    after = get(client, base + "&adjust=total&as_of=2023-08-02")["data"][0]
+    divs = get(client, "/v1/corporate-actions/dividends?symbol=LT&exchange=NSE")["data"]
+    f = next(r["dividend_factor"] for r in divs if r["ex_date"] == "2023-08-02")
+    assert before["close"] == pytest.approx(split["close"])
+    assert after["close"] == pytest.approx(split["close"] * f)
+
+
+def test_total_return_refused_without_dividend_factors(client):
+    assert get(client, "/v1/prices/daily?symbol=AAPL&adjust=total", 400)["error"]["code"] == "INVALID_PARAMETER"
+
+
+# --------------------------------------------------------------------------- universes
+def test_universe_snapshot_and_no_backfill(client):
+    b = get(client, "/v1/universes?index=NIFTY 50")
+    assert b["count"] == 50 and all(r["industry"] for r in b["data"])
+    e = get(client, "/v1/universes?index=NIFTY 50&as_of=2020-01-01", 404)
+    assert "survivorship" in e["error"]["message"]
 
 
 # --------------------------------------------------------------------------- point in time
@@ -274,4 +345,4 @@ def test_errors_use_envelope(client):
     assert get(client, "/v1/prices/daily?symbol=RELIANCE", 422)["error"]["code"] == "AMBIGUOUS_IDENTIFIER"
     assert get(client, "/v1/prices/daily?symbol=NOSUCHCO&exchange=NSE", 404)["error"]["code"] == "UNKNOWN_INSTRUMENT"
     assert get(client, "/v1/prices/daily?symbol=RELIANCE&exchange=NSE&start=bad", 400)["error"]["code"] == "INVALID_PARAMETER"
-    assert get(client, "/v1/prices/daily?symbol=RELIANCE&exchange=NSE&adjust=total", 400)["error"]["code"] == "INVALID_PARAMETER"
+    assert get(client, "/v1/prices/daily?symbol=MSFT&adjust=total", 400)["error"]["code"] == "INVALID_PARAMETER"

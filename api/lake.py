@@ -1,4 +1,5 @@
 """Application state: the pinned release, its datasets, a DuckDB connection and the registry."""
+import os
 import sqlite3
 
 import duckdb
@@ -24,8 +25,10 @@ class Lake:
                 f"{self.drift['changed']} changed (e.g. {self.drift['examples'][:3]}). "
                 f"Run scripts/freeze_release.py --verify {self.release.tag}")
         self.datasets = ds.load(self.release.paths)
+        h = self.datasets["nse_security_id_history"]
+        self.id_history = pd.read_parquet(h.files[0][1]) if h.files else None
         self.cache, self.cache_problem = cache.load(self.release, self.datasets)
-        self.con = duckdb.connect(config={"threads": 8})
+        self.con = duckdb.connect(config={"threads": int(os.environ.get("QUANTERA_DUCKDB_THREADS", "4"))})
         self.registry = self._load_registry()
 
     def _load_registry(self):
@@ -49,3 +52,18 @@ class Lake:
 
     def cursor(self):
         return self.con.cursor()
+
+    def nse_security(self, instrument_id=None, symbol=None):
+        """(security_key, segments) for an NSE instrument_id, or for a symbol that has ever
+        traded on NSE (old symbols resolve to the security that carried them)."""
+        h = self.id_history
+        if h is None:
+            return None, None
+        if instrument_id:
+            hit = h[(h.instrument_id == instrument_id) | (h.security_key == instrument_id)]
+        else:
+            hit = h[h.symbol == symbol.upper()].sort_values("last_date")
+        if hit.empty:
+            return None, None
+        key = hit.security_key.iloc[-1]
+        return key, h[h.security_key == key].sort_values("first_date")

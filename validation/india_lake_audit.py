@@ -64,6 +64,15 @@ DATASETS = {
                        "data/bronze/india/fundamentals/nse_results/meta/*.json"),
     "nse_option_greeks": ("data/gold/india/derivatives/nse_option_greeks/year=*/nse_option_greeks_????????.parquet",
                           "trade_date", ["trade_date", "contract_id"], None),
+    "nse_dividend_factors": ("data/gold/india/corporate_actions/nse_dividend_factors.parquet",
+                             "ex_date", ["isin", "ex_date"], None),
+    "nse_security_id_history": ("data/gold/india/reference/nse_security_id_history.parquet",
+                                "first_date", ["instrument_id", "symbol"], None),
+    "nse_symbol_changes": ("data/silver/india/reference/nse_symbol_changes.parquet", "effective_date",
+                           ["old_symbol", "new_symbol", "effective_date"],
+                           "data/bronze/india/reference/nse/retrieved=*/*"),
+    "nse_index_constituents": ("data/silver/india/reference/nse_index_constituents.parquet", "snapshot_date",
+                               ["snapshot_date", "index_name", "symbol", "series"], None),
 }
 GOLD = ["data/gold/india/corporate_actions/*.parquet", "data/gold/india/calendar/*.parquet"]
 # Duplicates that exist in the source itself and cannot be resolved (kept, reported as WARN).
@@ -173,6 +182,24 @@ def audit(manifest):
                 OR (option_type = 'CE' AND (delta < 0 OR delta > 1))
                 OR (option_type = 'PE' AND (delta > 0 OR delta < -1)))""").fetchone()[0]
             q(name, "greeks_in_bounds", bad == 0, f"{bad} OK rows with IV/Greeks outside bounds")
+        if name == "nse_dividend_factors":
+            bad = con.execute(f"""SELECT count(*) FROM {src} WHERE apply AND NOT (dividend_factor > 0
+                AND dividend_factor < 1 AND dividend_yield < 0.5 AND prior_close > 0)""").fetchone()[0]
+            q(name, "applied_factors_in_bounds", bad == 0, f"{bad} applied factors outside (0,1) or yield >= 50%")
+            na = con.execute(f"SELECT count(*) FILTER (WHERE NOT apply), count(*) FROM {src}").fetchone()
+            q(name, "unapplied_dividends", na[0] / max(na[1], 1) < 0.05,
+              f"{na[0]} of {na[1]} dividend events flagged and not applied (see status)", warn=True)
+        if name == "nse_security_id_history":
+            bad = con.execute(f"""SELECT count(*) FROM (SELECT instrument_id FROM {src} WHERE instrument_id IS NOT NULL
+                GROUP BY 1 HAVING count(DISTINCT security_key) > 1)""").fetchone()[0]
+            q(name, "isin_in_one_security", bad == 0, f"{bad} ISINs assigned to more than one security")
+        if name == "nse_symbol_changes":
+            bad = con.execute(f"SELECT count(*) FROM {src} WHERE quality_flag IS NOT NULL").fetchone()[0]
+            q(name, "rows_parsed", bad == 0, f"{bad} unparsed rows (kept, flagged)", warn=True)
+        if name == "nse_index_constituents":
+            bad = con.execute(f"""SELECT count(*) FROM (SELECT snapshot_date FROM {src} WHERE index_name = 'NIFTY 50'
+                GROUP BY 1 HAVING count(*) <> 50)""").fetchone()[0]
+            q(name, "nifty50_has_50_members", bad == 0, f"{bad} snapshots where NIFTY 50 does not have 50 members")
         if name == "amfi_mf_nav":
             bad = con.execute(f"SELECT count(*) FROM {src} WHERE nav IS NULL OR nav <= 0").fetchone()[0]
             q(name, "nav_positive", bad / max(stats[2], 1) < 0.001, f"{bad} rows null/non-positive NAV",

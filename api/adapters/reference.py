@@ -92,6 +92,52 @@ def resolve_ids(instrument_id: str | None = None, symbol: str | None = None, exc
                         "data": [h.as_dict() for h in hits]})
 
 
+@router.get("/v1/instruments/history")
+def instrument_history(instrument_id: str | None = None, symbol: str | None = None, exchange: str | None = None,
+                       isin: str | None = None, lake=Depends(get_lake)):
+    """Identity segments of an NSE security: every ISIN and symbol it traded under, with dates."""
+    hits = resolve(lake, instrument_id=instrument_id, symbol=symbol, exchange=exchange or "XNSE", isin=isin)
+    key, segs = lake.nse_security(instrument_id=hits[0].instrument_id)
+    if key is None:
+        raise APIError(404, "NO_DATA_IN_RANGE", "no NSE trading history for this instrument")
+    d = lake.dataset("nse_security_id_history")
+    cols = ["symbol", "instrument_id", "first_date", "last_date", "rows", "link_reason", "link_gap_days", "flag"]
+    seg = segs[cols].astype(object).where(segs[cols].notna(), None).to_dict("records")
+    return respond_obj({"security_key": key, "segments": seg},
+                       Meta.of(lake, d, notes=["link_reason: SAME_ISIN (rename), SYMBOL_CONTINUITY (ISIN change / "
+                                               "pre-2011 era), SYMBOL_CHANGE_FILE (NSE symbolchange.csv)"]))
+
+
+@router.get("/v1/universes")
+def universes(index: str | None = Query(None, description="e.g. NIFTY 50, NIFTY 500, NIFTY TOTAL MARKET"),
+              as_of: date | None = None, lake=Depends(get_lake)):
+    """Index constituents from the latest snapshot on or before as_of. Without `index`,
+    lists the available indices and snapshot dates."""
+    d = lake.dataset("nse_index_constituents")
+    files = [p for _, p in d.files]
+    cur = lake.cursor()
+    if not index:
+        rows = cur.execute(f"""SELECT index_name, list(DISTINCT snapshot_date ORDER BY snapshot_date) AS snapshots,
+                                      count(*) FILTER (WHERE snapshot_date = (SELECT max(snapshot_date) FROM {src()}))
+                                      AS latest_members
+                               FROM {src()} GROUP BY 1 ORDER BY 1""", {"files": files}).fetchall()
+        return respond_obj({"indices": [{"index": r[0], "snapshots": [str(s) for s in r[1]], "latest_members": r[2]}
+                                        for r in rows]}, Meta.of(lake, d))
+    as_of = as_of or date.fromisoformat(lake.release.frozen_date)
+    snap = cur.execute(f"SELECT max(snapshot_date) FROM {src()} WHERE upper(index_name) = upper($i) AND snapshot_date <= $a",
+                       {"files": files, "i": index, "a": as_of}).fetchall()[0][0]
+    if snap is None:
+        raise APIError(404, "NO_DATA_IN_RANGE",
+                       f"no {index} snapshot on or before {as_of}: membership history before the first snapshot "
+                       "is not in the release (do not back-fill today's members - survivorship bias)")
+    sql = f"""SELECT snapshot_date, index_name, symbol, isin, instrument_id, series, company_name, industry, source_file
+              FROM {src()} WHERE upper(index_name) = upper($i) AND snapshot_date = $s"""
+    page = Page(100_000, 0, "json")
+    return respond(fetch(lake, sql, {"files": files, "i": index, "s": snap}, "symbol", page), page,
+                   Meta.of(lake, d, as_of=str(as_of), snapshot_date=str(snap),
+                           notes=["membership as of snapshot_date only; industry is NSE's index-list classification"]))
+
+
 @router.get("/v1/calendar/trading")
 def trading_calendar(dataset: str = Query("NSE_CM", pattern="^(NSE_CM|NSE_FO|NSE_IDX|BSE_CM)$"),
                      start: date | None = None, end: date | None = None,

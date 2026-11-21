@@ -126,7 +126,7 @@ The error envelope is `{"error": {"code", "message", "details"}}`:
 **Run**
 
 ```
-python -m api                                   # 127.0.0.1:8000, latest release, internal_research, 4 workers
+python -m api                                   # 127.0.0.1:8001, latest release, internal_research, 4 workers
 python -m api --release lake-2026.11 --mode redistribution
 python -m api.cache --build                     # once per release (hot price cache, §6)
 pytest tests/api -q                             # §8 items 1-5
@@ -174,12 +174,27 @@ OpenAPI docs are served at `/docs`.
 | Greeks chain, one day | 57 ms | 300 ms |
 | SEC statements | 43 ms | 150 ms |
 
+**Re-test on `lake-2026.12`** (12 Nov 2026, `pytest tests/api`: 41 passed).
+- Prices now return full security histories, so for example HDFCBANK's 2011–2019 rows are back.
+- The load test ran with 4 workers and 4 DuckDB threads each (`QUANTERA_DUCKDB_THREADS`), on a desktop under load (load average about 6 from other apps).
+
+| Scenario | p95 | Target |
+|---|---|---|
+| 20-year single-stock history | 152 ms | 150 ms |
+| Split-adjusted 20-year history | 162 ms | 150 ms |
+| F&O chain, one day | 64 ms | 300 ms |
+| Greeks chain, one day | 75 ms | 300 ms |
+| SEC statements | 66 ms | 150 ms |
+
+The two history scenarios are now marginally over target. The query itself takes about 15 ms (2 of about 300 row groups); the rest is JSON for about 6,400 rows plus host load. The unchanged SEC endpoint also slowed from 43 to 66 ms between the two runs. Re-measure on an idle host before treating this as a regression. For bulk history pulls, `format=arrow` avoids JSON entirely.
+
 **Behaviour the API adds on top of the lake** (documented in responses as `notes`)
 
-- **NSE equities before about mid-2011.** The bhavcopy has no ISIN, so `instrument_id` is NULL. These rows are matched on the current NSE symbol and flagged `id_match=SYMBOL_PRE_ISIN`. Symbol changes before 2011 are not followed. *Lake fix (next release):* backfill `instrument_id` from symbol history.
+- **NSE security history (from `lake-2026.12`).** A request for an NSE instrument returns its security's full history: earlier ISINs (issued after most face-value splits), earlier symbols (renames) and pre-2011 rows that have no ISIN. The links come from `gold/india/reference/nse_security_id_history` (`docs/india_data_lake.md` §4c), and `id_match` on each row is `INSTRUMENT_ID`, `LINKED_OTHER_ISIN` or `LINKED_PRE_ISIN`. Former symbols (CADILAHC) resolve to their security. *Bug fixed:* in `lake-2026.11` the API keyed NSE history on today's ISIN only, so HDFCBANK silently lost 2011–2019 (570 symbols affected).
 - **BSE.** 3.1M bhavcopy rows are `UNLINKED` in the registry. They are matched on scrip code (`id_match=SCRIP_CODE`), not dropped.
 - **Yahoo global prices.** They are already split-adjusted at retrieval, even though Silver labels them `UNADJUSTED_OHLC_WITH_ADJ_CLOSE`. The API reverses the adjustment with the release's split table, so `adjust=none` gives prices as traded (NVDA 2024-06-07 = 1,208.88) and `adjust=split` re-applies splits only up to `as_of`. *Lake fix:* correct the label (or store raw prices) in the next release.
-- **`adjust=total`** is refused (400). The release has no dividend factors for NSE or BSE.
+- **`adjust=total`** (from `lake-2026.12`) applies split, bonus and cash-dividend factors up to `as_of` (`nse_dividend_factors`, rows with `apply=true`; `docs/india_data_lake.md` §4b). It is refused (400) for BSE-only and global listings, which have no dividend factors. Dividends per security: `/v1/corporate-actions/dividends`.
+- **Universes** (`/v1/universes`) are NSE index constituent snapshots with NSE industry. Snapshots start 2026-11-12. An `as_of` before the first snapshot returns 404 rather than back-filling today's members.
 - **SEC tickers spanning several CIKs** (BLK: predecessor 0001364742, then 0002012383) return all CIKs. `cik_role` tells them apart.
 - **NSE key financials.** The lake's `is_latest_filing` looks at all filings, including later ones. The API drops it and recomputes the latest version per period as of `as_of`.
 - **FRED series** are the latest revision at retrieval and are not point-in-time (no vintages yet). The event calendar's `is_future` reflects retrieval time. Corporate-action announcement dates are not in the release, so events are filtered by ex-date.

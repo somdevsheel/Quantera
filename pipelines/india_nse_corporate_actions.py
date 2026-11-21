@@ -40,7 +40,7 @@ API = "https://www.nseindia.com/api/corporates-corporateActions"
 PAGE = "https://www.nseindia.com/companies-listing/corporate-filings-actions"
 HEADERS = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36",
            "Accept": "application/json", "Referer": PAGE}
-SCHEMA_VERSION = "nse_corpact_v1"
+SCHEMA_VERSION = "nse_corpact_v2"  # v2: + dividend_cash_inr, dividend_parse_method
 
 RULES = [  # order matters: first match is primary type; all matches are kept
     ("SPLIT", r"\b(fv|face\s*value)\b.*\bsplit|sub[\s-]?division|\bsplit\b"),
@@ -72,6 +72,53 @@ def dividend_amount(subject):
 def dividend_pct(subject):
     m = re.search(NUM + r"\s*%", subject)
     return float(m.group(1)) if m else None
+
+
+# dividend_cash(): stricter parser used for total-return factors (v2). The legacy
+# dividend_per_share_inr above takes the first rupee amount anywhere in the subject, which
+# under-counts "Fin Rs4.5 + Spl Rs1.5" and misreads face-value splits ("Spl Rs10 To Rs2")
+# and rights premiums as dividends. It is kept unchanged for compatibility.
+RS = r"(?:rs|re|inr|₹)\.?\s*-?\s*"
+FV_CHANGE = re.compile(  # "Rs 10/- Per Share To Re 1", "Rs10tors2", "Rs10-Rs2", "Rs10to 4"
+    RS + NUM + r"\s*(?:/-)?\s*(?:per\s+(?:equity\s+)?share\s*)?(?:to|-)\s*(?:rs|re)?\.?\s*" + NUM, re.I)
+SEGMENT_SPLIT = re.compile(r"/(?!-)|\s+and\s+(?=face|fv|split|bonus|scheme|rights?)", re.I)
+REIT_SERIES = {"RR", "IV"}  # REIT / InvIT units: distributions mix interest, dividend, capital return
+
+
+def dividend_cash(subject, face_value, series):
+    """Cash dividend per share in INR for one corporate-action record.
+    Returns (amount or None, method). Methods: RS_AMOUNT (sum of rupee amounts in the
+    dividend segments), PCT_OF_FV (sum of % x face value), NIL, and non-usable
+    UNSUPPORTED_SERIES, AMBIGUOUS_FV (% dividend on a record that also changes face value),
+    AMBIGUOUS_UNIT (bare number, no Rs or %), UNPARSED."""
+    s = (subject or "").replace(",", "")
+    s = re.sub(r"(\d)\s*\.+\s*(\d)", r"\1.\2", s)  # source typos: "Re 0..30", "Rs 0 .70"
+    if not re.search(r"\bdiv", s, re.I):
+        return None, "NOT_DIVIDEND"
+    if series in REIT_SERIES:
+        return None, "UNSUPPORTED_SERIES"
+    fv_change = bool(FV_CHANGE.search(s)) or bool(re.search(r"face\s*value|\bfv\b|split|sub-?division", s, re.I))
+    segs = [g for g in SEGMENT_SPLIT.split(s) if re.search(r"\bdiv|\bspl\b|special|\bfin|\bint", g, re.I)]
+    segs = [FV_CHANGE.sub(" ", g) for g in segs]
+    segs = [g for g in segs if not re.search(r"\brghts?\b|\brights?\b|@\s*prm|premium", g, re.I)]
+    text = " + ".join(segs)
+    if re.search(r"\bnil\b", text, re.I):
+        return 0.0, "NIL"
+    rs = [float(x) for x in re.findall(RS + NUM, text, re.I)]
+    if rs:
+        return (round(sum(rs), 6), "RS_AMOUNT") if sum(rs) > 0 else (0.0, "ZERO_AMOUNT")
+    pct = [float(x) for x in re.findall(NUM + r"\s*\)?\s*%", text)]
+    if pct:
+        if fv_change:
+            return None, "AMBIGUOUS_FV"
+        if face_value is None or not face_value > 0:
+            return None, "UNPARSED"
+        if sum(pct) == 0:
+            return 0.0, "ZERO_AMOUNT"
+        return round(sum(pct) / 100.0 * face_value, 6), "PCT_OF_FV"
+    if re.search(r"div\w*\s*[-:]\s*" + NUM, text, re.I):
+        return None, "AMBIGUOUS_UNIT"
+    return None, "UNPARSED"
 
 
 SPLIT_RX = re.compile(
@@ -171,6 +218,9 @@ def build():
         lambda s: dividend_amount(s) if re.search(r"div", s, re.I) else None)
     df["dividend_pct_of_fv"] = df.subject.fillna("").map(
         lambda s: dividend_pct(s) if re.search(r"div", s, re.I) else None)
+    dc = [dividend_cash(s, fv, ser) for s, fv, ser in zip(df.subject, df.face_value, df.series)]
+    df["dividend_cash_inr"] = pd.array([x[0] for x in dc], dtype="Float64")
+    df["dividend_parse_method"] = pd.array([x[1] for x in dc], dtype="string")
     sr = df.subject.fillna("").map(split_ratio)
     df["split_fv_old"] = [x[0] for x in sr]
     df["split_fv_new"] = [x[1] for x in sr]

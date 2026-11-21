@@ -818,3 +818,26 @@ The API surfaced these lake findings, which are handled in the API and should be
 - Only 7 global symbols are in Silver.
 
 **Next:** Quantera integration (Step F), reading only through the API. Pending owner decisions are listed in `docs/api_design.md` §9.
+
+## 15. Status update — 12 November 2026 (lake gaps for the platform prompt)
+
+The platform master prompt (`claude_code_master_prompt_quant_platform_price_levels_only.docx`) is being built by extending AFOS. These lake gaps were closed first, and release **`lake-2026.12`** was frozen: 234,817 files, India audit 50 PASS / 0 FAIL / 2 WARN, API tests 41 passed.
+
+| Gap | Result |
+|---|---|
+| Dividends → total return | A stricter parser (Silver `dividend_cash_inr`, schema `nse_corpact_v2`) and Gold `nse_dividend_factors`: 25,293 of 25,766 events applied (98%), the rest flagged with a reason. The API's `adjust=total` and `/v1/corporate-actions/dividends` use them. |
+| Symbol renames / ISIN changes | Gold `nse_security_id_history`: 5,216 securities, 2,007 with linked history. **This fixed an API bug:** NSE histories had been keyed on today's ISIN, so HDFCBANK lost 2011–2019 and 570 symbols were affected. Former symbols now resolve. |
+| Sector / industry | NSE index-list industry for 754 stocks (22 industries). Other stocks are unclassified. |
+| Index universes | NSE constituent snapshots for 11 indices, from 2026-11-12. Historical membership is not available as data; the API refuses to back-fill it. |
+
+Details: `docs/india_data_lake.md` §4b, §4c and §5; `docs/api_design.md` §10. The pipelines are `india_dividend_factors.py`, `india_security_id_history.py` and `india_nse_reference_lists.py`, all run by `finalize_lake.sh`.
+
+**Still not in the lake** (gated in the platform as DATA BLOCKED or labelled):
+- historical index membership;
+- intraday data;
+- licensed news;
+- shareholding pattern;
+- BSE industry;
+- broker borrow and short-availability data.
+
+**Next:** AFOS integration (replace its simulated providers with this API), then the prompt's missing modules.

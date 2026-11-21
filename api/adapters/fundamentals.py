@@ -18,6 +18,15 @@ router = APIRouter(tags=["fundamentals"])
 NSE_TS = "strptime(filing_datetime, '%d-%b-%Y %H:%M')"
 
 
+def _nse_identity(lake, symbol):
+    """All symbols and ISINs a security has traded under (renames, ISIN changes), so filings
+    made under an earlier symbol are found. Falls back to the symbol itself."""
+    key, segs = lake.nse_security(symbol=symbol)
+    if segs is None:
+        return [symbol.upper()], []
+    return sorted(set(segs.symbol)), sorted({i.removeprefix("IN:") for i in segs.instrument_id.dropna()})
+
+
 def _as_of(lake, as_of):
     return as_of or date.fromisoformat(lake.release.frozen_date)
 
@@ -59,7 +68,8 @@ def statements(source: str = Query(..., pattern="^(sec|nse)$"), ticker: str | No
         if not symbol:
             raise invalid("symbol is required for source=nse")
         d = lake.dataset("nse_key_financials")
-        params = {"files": [p for _, p in d.files], "sym": symbol.upper(), "as_of": as_of}
+        syms, isins = _nse_identity(lake, symbol)
+        params = {"files": [p for _, p in d.files], "syms": syms, "isins": isins, "as_of": as_of}
         extra = ""
         if period_type:
             params["pt"] = period_type
@@ -67,14 +77,16 @@ def statements(source: str = Query(..., pattern="^(sec|nse)$"), ticker: str | No
         if consolidated:
             params["cons"] = consolidated
             extra += " AND consolidated = $cons"
-        latest = ("QUALIFY row_number() OVER (PARTITION BY symbol, period_type, from_date, to_date, consolidated "
+        latest = ("QUALIFY row_number() OVER (PARTITION BY period_type, from_date, to_date, consolidated "
                   "ORDER BY filing_datetime DESC, source_file DESC) = 1") if latest_only else ""
         sql = f"""SELECT CAST(from_date AS DATE) AS from_date, CAST(to_date AS DATE) AS to_date,
                          * EXCLUDE (from_date, to_date, is_latest_filing, filings_for_period)
-                  FROM {src()} WHERE symbol = $sym AND filing_datetime < CAST($as_of AS DATE) + INTERVAL 1 DAY {extra}
+                  FROM {src()} WHERE (list_contains($syms, symbol) OR list_contains($isins, isin))
+                    AND filing_datetime < CAST($as_of AS DATE) + INTERVAL 1 DAY {extra}
                   {latest}"""
         order = "to_date, period_type, consolidated, filing_datetime, source_file"
-        notes = ["amounts in the units stated by units_note; is_latest_filing is replaced by as-of selection"]
+        notes = ["amounts in the units stated by units_note; is_latest_filing is replaced by as-of selection",
+                 f"filings under all symbols/ISINs of the security: {syms}"]
     tbl = fetch(lake, sql, params, order, page)
     return respond(tbl, page, Meta.of(lake, d, as_of=str(as_of), latest_only=latest_only, notes=notes))
 
@@ -102,7 +114,8 @@ def facts(source: str = Query(..., pattern="^(sec|nse)$"), ticker: str | None = 
         if not symbol:
             raise invalid("symbol is required for source=nse")
         d = lake.dataset("nse_xbrl_facts")
-        params["files"] = require_files(d.select(keys={symbol.upper()}), symbol=symbol)
+        syms, _ = _nse_identity(lake, symbol)
+        params["files"] = require_files(d.select(keys=set(syms)), symbol=symbol)
         if accession:
             params["acc"] = accession
             extra += " AND source_file LIKE '%' || $acc || '%'"
