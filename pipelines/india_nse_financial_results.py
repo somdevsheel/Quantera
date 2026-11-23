@@ -46,6 +46,14 @@ API = "https://www.nseindia.com/api/corporates-financial-results"
 N500 = "https://nsearchives.nseindia.com/content/indices/ind_nifty500list.csv"
 HEADERS = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36",
            "Accept": "application/json, text/plain, */*", "Referer": PAGE}
+# SEBI Integrated Filing (results from the Mar-2025 quarter on). NSE serves this listing on the
+# nseindia.in domain to an honestly identified client: no cookies, no browser headers.
+META_IF = ROOT / "data/bronze/india/fundamentals/nse_results/meta_integrated"
+IF_API = "https://www.nseindia.in/api/integrated-filing-results"
+IF_TYPE = "Integrated Filing- Financials"
+HONEST_HEADERS = {"User-Agent": "QuanteraDataLake/1.0 (research data pipeline)",
+                  "Accept": "application/json, text/plain, */*"}
+INDEX_CONSTITUENTS = ROOT / "data/silver/india/reference/nse_index_constituents.parquet"
 XBRLI = "http://www.xbrl.org/2003/instance"
 XBRLDI = "http://xbrl.org/2006/xbrldi"
 SCHEMA_VERSION = "nse_xbrl_facts_v1"
@@ -100,6 +108,149 @@ class Nse:
                 last = exc
                 time.sleep(min(60, 4 * 2 ** (attempt - 1)))
         raise last
+
+
+class HonestClient:
+    """Same retry behaviour as Nse, but identifies itself as Quantera and never fetches a page
+    to collect cookies. Used for the Integrated Filing listing and its XBRL archives."""
+
+    def __init__(self, pause):
+        self.pause = pause
+        self.s = requests.Session()
+        self.s.headers.update(HONEST_HEADERS)
+
+    def get(self, url, **kw):
+        last = None
+        for attempt in range(1, 5):
+            try:
+                r = self.s.get(url, timeout=(10, 90), **kw)
+                if r.status_code == 404:
+                    return r
+                if r.status_code in (401, 403):  # refused: stop, never retry with a disguise
+                    raise PermissionError(f"HTTP {r.status_code}: access refused")
+                r.raise_for_status()
+                return r
+            except PermissionError:
+                raise
+            except requests.RequestException as exc:
+                last = exc
+                time.sleep(min(60, 4 * 2 ** (attempt - 1)))
+        raise last
+
+
+def local_universe(scope, limit):
+    """Symbols from local lake files only (no network): NIFTY 500 members first, then (scope
+    'all') every other EQ/BE/SM/ST symbol in the security master."""
+    first = []
+    if INDEX_CONSTITUENTS.exists():
+        ic = pd.read_parquet(INDEX_CONSTITUENTS)
+        ic = ic[(ic.index_name == "NIFTY 500") & (ic.snapshot_date == ic.snapshot_date.max())]
+        first = ic.symbol.str.strip().tolist()
+    rest = []
+    if scope == "all":
+        m = pd.read_parquet(MASTER)
+        rest = m[m.security_series.isin(["EQ", "BE", "SM", "ST"])].canonical_symbol.dropna().str.strip().tolist()
+    syms = list(dict.fromkeys(first + rest))
+    return syms[:limit] if limit else syms
+
+
+def stage_integrated_metadata(symbols, client, refresh):
+    """One listing request per symbol (all pages in one: size=100). Raw JSON kept in Bronze."""
+    META_IF.mkdir(parents=True, exist_ok=True)
+    fh, w = log_writer("integrated_metadata", ["symbol", "status", "filings", "financials",
+                                               "details", "logged_utc"])
+    for i, sym in enumerate(symbols, 1):
+        target = META_IF / f"{re.sub(r'[^A-Za-z0-9&_-]', '_', sym)}.json"
+        if target.exists() and not refresh:
+            continue
+        row = {"symbol": sym, "logged_utc": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+        try:
+            rows, total = [], None
+            for page in range(1, 201):  # pages are 1-based; stop at the reported total
+                r = client.get(IF_API, params={"index": "equities", "symbol": sym,
+                                               "size": 100, "page": page})
+                data = r.json() if r.status_code == 200 else {"data": []}
+                batch = data.get("data") if isinstance(data, dict) else None
+                if not isinstance(batch, list):
+                    raise ValueError("unexpected payload")
+                total = data.get("totalCount", 0) if total is None else total
+                rows += batch
+                if not batch or len(rows) >= total:
+                    break
+                time.sleep(client.pause)
+            seen, unique = set(), []
+            for x in rows:  # pages can overlap if the listing changes while we read it
+                k = (x.get("seq_Id"), x.get("type"), x.get("xbrl"))
+                if k not in seen:
+                    seen.add(k)
+                    unique.append(x)
+            rows = unique
+            if total and len(rows) < total:
+                raise ValueError(f"listing truncated: {len(rows)} of {total}")
+            tmp = target.with_suffix(".tmp")
+            tmp.write_text(json.dumps(rows))
+            os.replace(tmp, target)
+            row.update(status="DOWNLOADED", filings=len(rows),
+                       financials=sum(1 for x in rows if x.get("type") == IF_TYPE))
+        except PermissionError as exc:
+            row.update(status="REFUSED", details=str(exc)[:200])
+            w.writerow(row)
+            fh.close()
+            raise SystemExit(f"NSE refused the request ({exc}); stopping rather than retrying "
+                             "with different headers")
+        except Exception as exc:  # noqa: BLE001
+            row.update(status="FAILED", details=str(exc)[:200])
+        w.writerow(row)
+        fh.flush()
+        time.sleep(client.pause)
+        if i % 50 == 0:
+            print(f"integrated metadata {i}/{len(symbols)}", flush=True)
+    fh.close()
+    build_manifest()
+
+
+def _integrated_rows():
+    """Manifest rows from the Integrated Filing listings, in the same vocabulary as the
+    corporates-financial-results listing (Consolidated / Non-Consolidated, Audited / Un-Audited,
+    'DD-Mon-YYYY' dates, 'DD-Mon-YYYY HH:MM' filing time = public broadcast time)."""
+    isin_of = {}
+    if MASTER.exists():
+        m = pd.read_parquet(MASTER)
+        if "isin" in m.columns:
+            isin_of = dict(zip(m["canonical_symbol"], m["isin"]))
+    out = []
+    for f in sorted(META_IF.glob("*.json")) if META_IF.exists() else []:
+        for rec in json.loads(f.read_text()):
+            if rec.get("type") != IF_TYPE:
+                continue
+            qe = pd.to_datetime(rec.get("qe_Date"), format="%d-%b-%Y", errors="coerce")
+            # Public time: revisions carry no broadcast time, only creation_Date. Take the later
+            # of the two, so a filing never appears available before it actually was.
+            times = [pd.to_datetime(rec.get(k), format="%d-%b-%Y %H:%M:%S", errors="coerce")
+                     for k in ("broadcast_Date", "creation_Date")]
+            times = [t for t in times if pd.notna(t)]
+            bc = max(times) if times else pd.NaT
+            x = rec.get("xbrl") or ""
+            if pd.isna(qe):
+                continue
+            start = qe.to_period("Q").start_time.normalize()  # SEBI quarters are calendar quarters
+            cons = rec.get("consolidated")
+            aud = rec.get("audited")
+            out.append({
+                "symbol": rec.get("symbol"), "isin": isin_of.get(rec.get("symbol")),
+                "company_name": rec.get("cmName"), "period_type": "Quarterly", "relating_to": None,
+                "from_date": start.strftime("%d-%b-%Y"), "to_date": qe.strftime("%d-%b-%Y"),
+                "financial_year": None,
+                "consolidated": "Non-Consolidated" if cons == "Standalone" else cons,
+                "audited": "Un-Audited" if (aud or "").lower().replace("-", "") == "unaudited" else aud,
+                "cumulative": "Non-cumulative", "ind_as": None, "bank": None,
+                "filing_datetime": bc.strftime("%d-%b-%Y %H:%M") if pd.notna(bc) else None,
+                "broadcast_datetime": rec.get("broadcast_Date"), "seq_number": rec.get("seq_Id"),
+                "xbrl_url": x if x.lower().endswith(".xml") else None,
+                "meta_file": str(f.relative_to(ROOT)), "listing_source": "integrated-filing-results",
+                "revision": rec.get("type_Sub"),
+            })
+    return out
 
 
 def universe(limit):
@@ -164,8 +315,10 @@ def build_manifest():
                 "ind_as": rec.get("indAs"), "bank": rec.get("bank"),
                 "filing_datetime": rec.get("filingDate"), "broadcast_datetime": rec.get("broadCastDate"),
                 "seq_number": rec.get("seqNumber"), "xbrl_url": x if x.lower().endswith(".xml") else None,
-                "meta_file": str(f.relative_to(ROOT)),
+                "meta_file": str(f.relative_to(ROOT)), "listing_source": "corporates-financial-results",
+                "revision": None,
             })
+    rows += _integrated_rows()
     m = pd.DataFrame(rows)
     if m.empty:
         return m
@@ -180,10 +333,14 @@ def build_manifest():
     return m
 
 
-def stage_xbrl(symbols, nse):
+def stage_xbrl(symbols, nse, only_source=None):
+    """Downloads XBRL documents not yet on disk (existing files are never fetched again).
+    ``only_source`` restricts to one listing (e.g. the Integrated Filing gap fill)."""
     m = pd.read_csv(MANIFEST, dtype=str)
     order = {s: i for i, s in enumerate(symbols)}
     m = m[m.xbrl_url.notna() & m.symbol.isin(order)]
+    if only_source and "listing_source" in m.columns:
+        m = m[m.listing_source == only_source]
     m = m.assign(o=m.symbol.map(order)).sort_values(["o", "to_date"]).drop_duplicates("xbrl_file")
     fh, w = log_writer("xbrl", ["symbol", "xbrl_file", "status", "bytes", "details", "logged_utc"])
     done = 0
@@ -372,12 +529,35 @@ def stage_normalize(symbols, reparse=False):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--stage", choices=["metadata", "xbrl", "normalize", "all"], default="all")
+    p.add_argument("--stage", choices=["metadata", "xbrl", "normalize", "all", "integrated"],
+                   default="all",
+                   help="integrated = fill the post-Dec-2024 gap from SEBI Integrated Filing: "
+                        "listing, then only the missing XBRL, then normalize")
+    p.add_argument("--universe", choices=["nifty500", "all"], default="all",
+                   help="integrated stage: local universe (no network)")
+    p.add_argument("--download-only", action="store_true",
+                   help="integrated stage: listing + missing XBRL only. Gold is NOT rewritten, so "
+                        "the frozen release stays valid; normalize + freeze a new release later")
     p.add_argument("--limit", type=int)
     p.add_argument("--pause", type=float, default=1.0)
     p.add_argument("--refresh-metadata", action="store_true")
     p.add_argument("--reparse", action="store_true", help="re-parse XBRL even if Silver facts exist")
     a = p.parse_args()
+    if a.stage == "integrated":
+        symbols = local_universe(a.universe, a.limit)
+        print("Universe (local):", len(symbols), "symbols", flush=True)
+        client = HonestClient(a.pause)
+        stage_integrated_metadata(symbols, client, a.refresh_metadata)
+        stage_xbrl(symbols, client, only_source="integrated-filing-results")
+        if a.download_only:
+            print("Download-only: Gold not rebuilt (run --stage normalize, then freeze a release)")
+            return
+        # Gold is rebuilt from EVERY symbol in the manifest (old filings come from their
+        # existing Silver parquet, no re-parse), never from this run's universe alone: a
+        # NIFTY 500 run must not drop the other companies' fundamentals.
+        everyone = sorted(pd.read_csv(MANIFEST, dtype=str, usecols=["symbol"]).symbol.dropna().unique())
+        stage_normalize(everyone, a.reparse)
+        return
     symbols = universe(a.limit)
     print("Universe:", len(symbols), "symbols", flush=True)
     nse = Nse(a.pause) if a.stage in ("metadata", "xbrl", "all") else None

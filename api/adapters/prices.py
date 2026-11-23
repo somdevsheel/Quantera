@@ -79,7 +79,7 @@ def prices_daily(instrument_id: str | None = None, symbol: str | None = None, ex
     if series:
         params["series"] = series.upper()
         series_sql = "AND security_series = $series"
-    india = lst.source == "exchange_listings"
+    india = lst.source in ("exchange_listings", "nse_identity_history")
     sk, segs = lake.nse_security(instrument_id=lst.instrument_id) if india else (None, None)
     isins = sorted(set(segs.instrument_id.dropna())) if segs is not None else [lst.instrument_id]
     if segs is not None:
@@ -197,7 +197,7 @@ def corporate_actions(instrument_id: str | None = None, symbol: str | None = Non
                       page: Page = Depends(page_params), lake=Depends(get_lake)):
     lst = resolve_one(lake, instrument_id=instrument_id, symbol=symbol, exchange=exchange, bse_code=bse_code, isin=isin)
     as_of = _as_of(lake, as_of)
-    if lst.source == "exchange_listings":
+    if lst.source in ("exchange_listings", "nse_identity_history"):
         d = lake.dataset("india_corporate_actions")
         _, segs = lake.nse_security(instrument_id=lst.instrument_id)
         keys = sorted(set(segs.instrument_id.dropna())) if segs is not None else [lst.instrument_id]
@@ -220,7 +220,7 @@ def dividends(instrument_id: str | None = None, symbol: str | None = None, excha
               bse_code: str | None = None, isin: str | None = None, as_of: date | None = None,
               include_unapplied: bool = True, page: Page = Depends(page_params), lake=Depends(get_lake)):
     lst = resolve_one(lake, instrument_id=instrument_id, symbol=symbol, exchange=exchange, bse_code=bse_code, isin=isin)
-    sk, _ = lake.nse_security(instrument_id=lst.instrument_id) if lst.source == "exchange_listings" else (None, None)
+    sk, _ = lake.nse_security(instrument_id=lst.instrument_id) if lst.source in ("exchange_listings", "nse_identity_history") else (None, None)
     if sk is None:
         raise invalid("dividends are available for NSE-traded Indian securities only")
     as_of = _as_of(lake, as_of)

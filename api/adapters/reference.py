@@ -1,5 +1,6 @@
 """Releases, health, catalog, instruments and calendars."""
-from datetime import date
+import math
+from datetime import date, timedelta
 
 import pandas as pd
 import pyarrow.parquet as pq
@@ -8,7 +9,7 @@ from fastapi import APIRouter, Depends, Query
 from ..deps import get_lake
 from ..errors import APIError, invalid
 from ..identifiers import EXCHANGE_ALIASES, mic, resolve
-from ..query import Meta, Page, fetch, page_params, respond, respond_obj, src
+from ..query import Meta, Page, fetch, page_params, require_files, respond, respond_obj, src, ymd
 from ..release import available
 from ..settings import ROOT
 
@@ -136,6 +137,63 @@ def universes(index: str | None = Query(None, description="e.g. NIFTY 50, NIFTY 
     return respond(fetch(lake, sql, {"files": files, "i": index, "s": snap}, "symbol", page), page,
                    Meta.of(lake, d, as_of=str(as_of), snapshot_date=str(snap),
                            notes=["membership as of snapshot_date only; industry is NSE's index-list classification"]))
+
+
+@router.get("/v1/universes/liquid")
+def liquid_universe(as_of: date = Query(..., description="decision date; only bars on or before it are used"),
+                    top: int = Query(200, ge=5, le=2000), window: int = Query(63, ge=5, le=252),
+                    min_days_share: float = Query(0.8, gt=0, le=1), lake=Depends(get_lake)):
+    """Point-in-time liquid universe: NSE EQ-series stocks ranked by median daily traded value over
+    the `window` sessions up to `as_of`. Stocks that later delisted are included (no survivorship
+    bias); a stock needs prices on at least `min_days_share` of the sessions."""
+    d = lake.dataset("nse_equity_daily")
+    span = timedelta(days=int(window * 1.6) + 10)
+    files = require_files(d.select(ymd(as_of - span), ymd(as_of)))
+    cur = lake.cursor()
+    days = cur.execute(f"""SELECT count(DISTINCT CAST(trade_date AS DATE)) FROM {src()}
+                           WHERE CAST(trade_date AS DATE) <= $a""", {"files": files, "a": as_of}).fetchall()[0][0]
+    sessions = min(days, window)
+    sql = f"""WITH last AS (
+                SELECT DISTINCT CAST(trade_date AS DATE) AS d FROM {src()}
+                WHERE CAST(trade_date AS DATE) <= $a ORDER BY d DESC LIMIT $w)
+              SELECT instrument_id, any_value(symbol ORDER BY trade_date DESC) AS symbol,
+                     any_value(isin) AS isin, median(traded_value) AS median_traded_value,
+                     count(*) AS days, max(CAST(trade_date AS DATE)) AS last_trade_date
+              FROM {src()} WHERE security_series = 'EQ' AND instrument_id IS NOT NULL
+                AND CAST(trade_date AS DATE) IN (SELECT d FROM last)
+              GROUP BY instrument_id HAVING count(*) >= $min_days"""
+    rows = cur.execute(sql, {"files": files, "a": as_of, "w": window,
+                             "min_days": int(math.ceil(min_days_share * sessions))}).to_arrow_table()
+    rows = rows.sort_by([("median_traded_value", "descending")]).slice(0, top)
+    page = Page(100_000, 0, "json")
+    return respond(rows, page, Meta.of(lake, d, as_of=str(as_of), sessions=sessions, top=top,
+                                       notes=["ranked by median traded value (INR) of EQ-series bars on or "
+                                              "before as_of; delisted stocks included; rows without an ISIN "
+                                              "(mostly before 2011) cannot be identified and are left out"]))
+
+
+@router.get("/v1/sectors")
+def sectors(industry: str | None = Query(None, description="e.g. Information Technology"),
+            lake=Depends(get_lake)):
+    """NSE industry classification (index-list members). Without `industry`, lists the industries
+    with member counts; with it, lists the members."""
+    d = lake.dataset("nse_industry_classification")
+    files = [p for _, p in d.files]
+    cur = lake.cursor()
+    snap = cur.execute(f"SELECT max(snapshot_date) FROM {src()}", {"files": files}).fetchall()[0][0]
+    meta = Meta.of(lake, d, snapshot_date=str(snap),
+                   notes=["NSE index-list industry; covers index members only (not every listed "
+                          "company); a single snapshot, so it is the current classification"])
+    if not industry:
+        rows = cur.execute(f"""SELECT industry, count(*) FROM {src()} WHERE snapshot_date = $s
+                               GROUP BY 1 ORDER BY 1""", {"files": files, "s": snap}).fetchall()
+        return respond_obj({"industries": [{"industry": r[0], "members": r[1]} for r in rows]},
+                           meta)
+    sql = f"""SELECT snapshot_date, industry, symbol, isin, instrument_id, company_name, source_file
+              FROM {src()} WHERE upper(industry) = upper($i) AND snapshot_date = $s"""
+    page = Page(100_000, 0, "json")
+    return respond(fetch(lake, sql, {"files": files, "i": industry, "s": snap}, "symbol", page),
+                   page, meta)
 
 
 @router.get("/v1/calendar/trading")

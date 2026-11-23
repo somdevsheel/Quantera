@@ -1,0 +1,51 @@
+# Quantera platform CI. The data lake lives only on the build machine, so lake-backed tests
+# (tests/platform, tests/api) run locally through scripts/check.sh; CI covers lint, types,
+# migrations on a fresh PostgreSQL and the pure calculation tests.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  platform:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: quantera
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: quantera
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U quantera" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      QUANTERA_DATABASE_URL: postgresql+psycopg://quantera:ci-only-password@127.0.0.1:5432/quantera
+      QUANTERA_JWT_SECRET: ci-only-jwt-secret-not-used-anywhere-else-0123456789
+      QUANTERA_ENVIRONMENT: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Lint
+        run: ruff check quantera quant migrations tests/platform tests/quant
+      - name: Types
+        run: mypy
+      - name: Migrations apply, match the models, and roll back
+        run: |
+          alembic upgrade head
+          alembic check
+          alembic downgrade base
+          alembic upgrade head
+      - name: Calculation tests
+        run: pytest -q tests/quant

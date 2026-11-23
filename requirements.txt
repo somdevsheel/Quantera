@@ -52,3 +52,22 @@ urllib3==2.8.0
 uvicorn==0.38.0
 websockets==17.4
 yfinance==1.7.0
+# --- platform (API, database, auth) ---
+alembic==1.20.1
+annotated-doc==0.0.6
+argon2-cffi==25.1.0
+argon2-cffi-bindings==26.2.0
+Mako==1.4.3
+MarkupSafe==3.0.4
+psycopg==3.3.9
+psycopg-binary==3.3.9
+PyJWT==2.15.1
+cryptography==46.0.3
+redis==8.1.0
+SQLAlchemy==2.1.9
+dnspython==2.9.2
+email-validator==2.4.0
+python-multipart==0.0.34
+joblib==1.6.0
+scikit-learn==1.9.1
+threadpoolctl==3.8.0

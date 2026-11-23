@@ -193,6 +193,35 @@ def test_universe_snapshot_and_no_backfill(client):
     assert "survivorship" in e["error"]["message"]
 
 
+def test_liquid_universe_is_point_in_time_and_keeps_delisted(client):
+    b = get(client, "/v1/universes/liquid?as_of=2015-06-30&top=50")
+    rows = b["data"]
+    assert b["count"] == 50 and all(r["last_trade_date"] <= "2015-06-30" for r in rows)
+    vals = [r["median_traded_value"] for r in rows]
+    assert vals == sorted(vals, reverse=True)
+    syms = {r["symbol"] for r in rows}
+    assert "HDFC" in syms  # merged into HDFCBANK and delisted in 2023: still in the 2015 universe
+
+
+def test_delisted_security_prices_reachable_by_instrument_id(client):
+    rows = get(client, "/v1/universes/liquid?as_of=2015-06-30&top=50")["data"]
+    hdfc = next(r for r in rows if r["symbol"] == "HDFC")  # delisted 2023 (merged)
+    b = get(client, f"/v1/prices/daily?instrument_id={hdfc['instrument_id']}&exchange=NSE"
+                    "&start=2015-06-01&end=2015-06-30")
+    assert b["count"] >= 15 and b["instrument"]["source"] == "nse_identity_history"
+
+
+def test_sectors_catalogue_and_members(client):
+    cat = get(client, "/v1/sectors")
+    names = {i["industry"]: i["members"] for i in cat["industries"]}
+    assert cat["snapshot_date"] and sum(names.values()) > 500
+    it = next(n for n in names if "Information Technology" in n)
+    b = get(client, f"/v1/sectors?industry={it.lower()}")  # case-insensitive
+    assert b["count"] == names[it] and {r["industry"] for r in b["data"]} == {it}
+    assert any(r["symbol"] == "TCS" for r in b["data"])
+    get(client, "/v1/sectors?industry=No Such Industry", 404)
+
+
 # --------------------------------------------------------------------------- point in time
 def _close(client, url):
     rows = get(client, url)["data"]

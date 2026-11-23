@@ -58,6 +58,20 @@ def resolve(lake, instrument_id=None, symbol=None, exchange=None, bse_code=None,
             el_hit = el[(el.instrument_id == key) & (el.exchange_mic == "XNSE")]
     out = [Listing(r.instrument_id, r.exchange_mic, r.listing_symbol, r.listing_code, r.listing_name, "exchange_listings")
            for r in el_hit.itertuples()]
+    if instrument_id and not out and ins_hit.empty and ex in (None, "XNSE"):
+        # Not in today's registry: an earlier ISIN of a listed security, or a DELISTED security.
+        # Both traded on NSE and are in the identity history, so their prices stay reachable
+        # (point-in-time universes include delisted stocks; refusing them would reintroduce
+        # survivorship bias).
+        key, segs = lake.nse_security(instrument_id=instrument_id)
+        if key:
+            cur = el[(el.instrument_id == key) & (el.exchange_mic == "XNSE")]
+            if not cur.empty:
+                out = [Listing(r.instrument_id, r.exchange_mic, r.listing_symbol, r.listing_code,
+                               r.listing_name, "exchange_listings") for r in cur.itertuples()]
+            else:
+                last = segs.iloc[-1]
+                out = [Listing(key, "XNSE", last.symbol, None, None, "nse_identity_history")]
     covered = {l.exchange_mic for l in out}
     out += [Listing(r.instrument_id, r.exchange_mic, r.canonical_symbol, None, r.instrument_name, "instruments")
             for r in ins_hit.itertuples()

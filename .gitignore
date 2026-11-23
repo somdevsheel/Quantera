@@ -96,3 +96,6 @@ scripts/resume_and_finalize.sh
 /yf
 /test.txt
 /sqlite3
+# model artifacts (immutable, checksummed; back up with the database)
+/artifacts/
+/logs/
